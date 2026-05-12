@@ -25,8 +25,8 @@ void usage(char* name)
 
 typedef struct client {
     int fd;
-    char name[MAX_MSG_LEN + 1];
-    char beloved_name[MAX_MSG_LEN + 1];
+    char name[MAX_MSG_LEN];
+    char beloved_name[MAX_MSG_LEN];
 } client_t;
 
 int new_client_index(client_t* clients)
@@ -134,7 +134,7 @@ void do_server(int local_socket_fd, int timeout)
                 ERR("get_client_index");
             }
 
-            char msg[MAX_MSG_LEN + 1];
+            char msg[MAX_MSG_LEN];
             ssize_t msg_size;
             if ((msg_size = recv(fd, msg, sizeof(msg) - 1, 0)) == -1) {
                 ERR("recv");
@@ -158,6 +158,10 @@ void do_server(int local_socket_fd, int timeout)
                 clients[client_index].fd = -1;
                 clients[client_index].name[0] = '\0';
 
+                continue;
+            }
+
+            if (strcspn(msg, "\n") == msg_size) {
                 continue;
             }
 
