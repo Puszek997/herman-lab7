@@ -157,33 +157,80 @@ void do_server(int local_socket_fd, int timeout)
 
                 clients[client_index].fd = -1;
                 clients[client_index].name[0] = '\0';
+                clients[client_index].beloved_name[0] = '\0';
 
                 continue;
             }
 
-            if (strcspn(msg, "\n") == msg_size) {
+            // incorrect msg
+            if (strcspn(msg, "\n") == (size_t)msg_size) {
                 continue;
             }
 
             msg[strcspn(msg, "\n")] = '\0';
             if (clients[client_index].name[0] == '\0') {
                 strcpy(clients[client_index].name, msg);
-                continue;
+            } else if (clients[client_index].beloved_name[0] == '\0') {
+                strcpy(clients[client_index].beloved_name, msg);
+                printf("%s wants to marry %s\n", clients[client_index].name, clients[client_index].beloved_name);
+
+                for (int i = 0; i < MAX_CLIENTS; i++) {
+                    if (clients[i].fd != -1 && i != client_index) {
+                        if (strcmp(clients[client_index].name, clients[i].beloved_name) == 0) {
+                            if (strcmp(clients[client_index].beloved_name, clients[i].name) == 0) {
+                                printf("%s and %s got married!\n", clients[client_index].name, clients[client_index].beloved_name);
+
+                                char congratulations_msg[MAX_MSG_LEN];
+                                snprintf(
+                                    congratulations_msg,
+                                    sizeof(congratulations_msg),
+                                    "Congratulations, %s and %s!",
+                                    clients[client_index].name,
+                                    clients[client_index].beloved_name
+                                );
+
+                                if (send(fd, congratulations_msg, sizeof(congratulations_msg), 0) == -1) {
+                                    ERR("send");
+                                }
+
+                                snprintf(
+                                    congratulations_msg,
+                                    sizeof(congratulations_msg),
+                                    "Congratulations, %s and %s!",
+                                    clients[i].name,
+                                    clients[i].beloved_name
+                                );
+
+                                if (send(clients[i].fd, congratulations_msg, sizeof(congratulations_msg), 0) == -1) {
+                                    ERR("send");
+                                }
+
+                                if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL) == -1) {
+                                    ERR("epoll_ctl");
+                                }
+                                if (close(fd) == -1) {
+                                    ERR("close");
+                                }
+
+                                clients[client_index].fd = -1;
+                                clients[client_index].name[0] = '\0';
+                                clients[client_index].beloved_name[0] = '\0';
+
+                                if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, clients[i].fd, NULL) == -1) {
+                                    ERR("epoll_ctl");
+                                }
+                                if (close(clients[i].fd) == -1) {
+                                    ERR("close");
+                                }
+
+                                clients[i].fd = -1;
+                                clients[i].name[0] = '\0';
+                                clients[i].beloved_name[0] = '\0';
+                            }
+                        }
+                    }
+                }
             }
-
-            strcpy(clients[client_index].beloved_name, msg);
-
-            printf("%s wants to marry %s\n", clients[client_index].name, clients[client_index].beloved_name);
-
-            if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL) == -1) {
-                ERR("epoll_ctl");
-            }
-            if (close(fd) == -1) {
-                ERR("close");
-            }
-
-            clients[client_index].fd = -1;
-            clients[client_index].name[0] = '\0';
         }
     }
 }
