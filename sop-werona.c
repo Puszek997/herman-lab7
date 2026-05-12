@@ -23,6 +23,41 @@ void usage(char* name)
 
 #define BACKLOG 3 // nwm ile dac tutaj tak szczerze
 
+typedef struct client {
+    int fd;
+    char name[MAX_MSG_LEN + 1];
+    char beloved_name[MAX_MSG_LEN + 1];
+} client_t;
+
+int new_client_index(client_t* clients)
+{
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (-1 == clients[i].fd) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int get_client_index(client_t* clients, int client_fd)
+{
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (client_fd == clients[i].fd) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void init_clients(client_t* clients)
+{
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        clients[i].fd = -1;
+        clients[i].name[0] = '\0';
+        clients[i].beloved_name[0] = '\0';
+    }
+}
+
 void do_server(int local_socket_fd, int timeout)
 {
     int epoll_fd;
@@ -31,16 +66,19 @@ void do_server(int local_socket_fd, int timeout)
     }
 
     struct epoll_event events[MAX_CLIENTS];
-    struct epoll_event local_socket_event = { .events = EPOLLIN,
-                                              .data.fd = local_socket_fd };
+    struct epoll_event event = { .events = EPOLLIN,
+                                 .data.fd = local_socket_fd };
 
-    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, local_socket_fd, &local_socket_event) == -1) {
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, local_socket_fd, &event) == -1) {
         ERR("epoll_ctl");
     }
 
+    client_t clients[MAX_CLIENTS];
+    init_clients(clients);
+
     while (1) {
         int nfds;
-        if ((nfds = epoll_wait(epoll_fd, events, MAX_CLIENTS, timeout * 1000)) == -1) { // nwm?
+        if ((nfds = epoll_wait(epoll_fd, events, MAX_CLIENTS, timeout * 1000)) == -1) {
             if (errno == EINTR) {
                 continue;
             }
@@ -50,6 +88,13 @@ void do_server(int local_socket_fd, int timeout)
         if (nfds == 0) {
             printf("No one needs my help anymore!\n");
             close(epoll_fd);
+            for (int i = 0; i < MAX_CLIENTS; i++) {
+                if (clients[i].fd != -1) {
+                    if (close(clients[i].fd) == -1) {
+                        ERR("close");
+                    }
+                }
+            }
             return;
         }
 
@@ -62,12 +107,79 @@ void do_server(int local_socket_fd, int timeout)
                     ERR("add_new_client");
                 }
 
+                // czy na pewno tutaj fcntl?
+
                 printf("Another young person (%d) needs my help!\n", client_fd);
 
-                if (close(client_fd) == -1) {
+                int client_index = new_client_index(clients);
+                if (client_index == -1) {
+                    if (close(client_fd) == -1) {
+                        ERR("close");
+                    }
+                    continue;
+                }
+
+                clients[client_index].fd = client_fd;
+                event.data.fd = client_fd;
+
+                if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &event) == -1) {
+                    ERR("epoll_ctl");
+                }
+
+                continue;
+            }
+
+            int client_index;
+            if ((client_index = get_client_index(clients, fd)) == -1) {
+                ERR("get_client_index");
+            }
+
+            char msg[MAX_MSG_LEN + 1];
+            ssize_t msg_size;
+            if ((msg_size = recv(fd, msg, sizeof(msg) - 1, 0)) == -1) {
+                ERR("recv");
+            }
+
+            // disconnect
+            if (msg_size == 0) {
+                if (clients[client_index].name[0] == '\0') {
+                    printf("I lost contact with ??\n");
+                } else {
+                    printf("I lost contact with %s\n", clients[client_index].name);
+                }
+
+                if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL) == -1) {
+                    ERR("epoll_ctl");
+                }
+                if (close(fd) == -1) {
                     ERR("close");
                 }
+
+                clients[client_index].fd = -1;
+                clients[client_index].name[0] = '\0';
+
+                continue;
             }
+
+            msg[strcspn(msg, "\n")] = '\0';
+            if (clients[client_index].name[0] == '\0') {
+                strcpy(clients[client_index].name, msg);
+                continue;
+            }
+
+            strcpy(clients[client_index].beloved_name, msg);
+
+            printf("%s wants to marry %s\n", clients[client_index].name, clients[client_index].beloved_name);
+
+            if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, NULL) == -1) {
+                ERR("epoll_ctl");
+            }
+            if (close(fd) == -1) {
+                ERR("close");
+            }
+
+            clients[client_index].fd = -1;
+            clients[client_index].name[0] = '\0';
         }
     }
 }
