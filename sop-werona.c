@@ -134,7 +134,7 @@ void do_server(int local_socket_fd, int timeout)
                 ERR("get_client_index");
             }
 
-            char msg[MAX_MSG_LEN];
+            char msg[MAX_MSG_LEN + 1] = { 0 };
             ssize_t msg_size;
             if ((msg_size = recv(fd, msg, sizeof(msg) - 1, 0)) == -1) {
                 ERR("recv");
@@ -189,7 +189,7 @@ void do_server(int local_socket_fd, int timeout)
                                     clients[client_index].beloved_name
                                 );
 
-                                if (send(fd, congratulations_msg, sizeof(congratulations_msg), 0) == -1) {
+                                if (send(fd, congratulations_msg, strlen(congratulations_msg), 0) == -1) {
                                     ERR("send");
                                 }
 
@@ -201,7 +201,7 @@ void do_server(int local_socket_fd, int timeout)
                                     clients[i].beloved_name
                                 );
 
-                                if (send(clients[i].fd, congratulations_msg, sizeof(congratulations_msg), 0) == -1) {
+                                if (send(clients[i].fd, congratulations_msg, strlen(congratulations_msg), 0) == -1) {
                                     ERR("send");
                                 }
 
