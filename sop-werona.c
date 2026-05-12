@@ -180,7 +180,7 @@ void do_server(int local_socket_fd, int timeout)
                             if (strcmp(clients[client_index].beloved_name, clients[i].name) == 0) {
                                 printf("%s and %s got married!\n", clients[client_index].name, clients[client_index].beloved_name);
 
-                                char congratulations_msg[MAX_MSG_LEN];
+                                char congratulations_msg[148];
                                 snprintf(
                                     congratulations_msg,
                                     sizeof(congratulations_msg),
